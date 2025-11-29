@@ -1,3 +1,47 @@
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["rocqblueprint", "rocqblueprint.Packages"]
+
+[project]
+name = "rocqblueprint"
+version = "0.0.9"
+dependencies = [
+  "plasTeX >= 3.1",
+  "plastexshowmore >= 0.0.2",
+  "plastexdepgraph >= 0.0.4",
+  "click",
+  "rich",
+  "rich-click",
+  "tomlkit",
+  "Jinja2 >= 3.1.0",
+  "GitPython >= 3.1.28"
+]
+requires-python = ">=3.8"
+authors = [
+  {name="Patrick Massot"},
+  {name="Peter LeFanu Lumsdaine"},
+  {name="Andrej Bauer"},
+  {name="Reinis Cirpons"}
+]
+maintainers = [
+  {name="Reinis Cirpons", email="reinis.cirpons@inria.fr"}
+]
+description = "Rocq prover blueprint plasTeX plugin."
+readme = "README.md"
+keywords = ["Rocq", "Rocq blueprint"]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent"
+]
+
+[project.urls]
+Homepage = "https://github.com/reiniscirpons/rocqblueprint"
+
+[project.scripts]
+rocqblueprint = "rocqblueprint.client:safe_cli"

@@ -1,4 +1,4 @@
-include leanblueprint/static/*
-recursive-include leanblueprint/templates *
-recursive-include leanblueprint/jekyll_templates *
-include leanblueprint/Packages/renderer_templates/*
+include rocqblueprint/static/*
+recursive-include rocqblueprint/templates *
+recursive-include rocqblueprint/jekyll_templates *
+include rocqblueprint/Packages/renderer_templates/*
