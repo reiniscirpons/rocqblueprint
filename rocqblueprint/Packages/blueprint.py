@@ -1,11 +1,11 @@
 """
-Package Lean blueprint
+Package Rocq blueprint
 
 This depends on the depgraph plugin. This plugin has to be installed but then it is
 used automatically.
 
 Options:
-* project: lean project path
+* project: rocq project path
 
 * showmore: enable buttons showing or hiding proofs (this requires the showmore plugin).
 
@@ -71,12 +71,12 @@ class graphcolor(Command):
         colors[node_type] = (attrs['color'].strip(), attrs['color_descr'].strip())
 
 
-class leanok(Command):
-    r"""\leanok"""
+class rocqok(Command):
+    r"""\rocqok"""
 
     def digest(self, tokens):
         Command.digest(self, tokens)
-        self.parentNode.userdata['leanok'] = True
+        self.parentNode.userdata['rocqok'] = True
 
 
 class notready(Command):
@@ -87,24 +87,24 @@ class notready(Command):
         self.parentNode.userdata['notready'] = True
 
 
-class mathlibok(Command):
-    r"""\mathlibok"""
+class mathcompok(Command):
+    r"""\mathcompok"""
 
     def digest(self, tokens):
         Command.digest(self, tokens)
-        self.parentNode.userdata['leanok'] = True
-        self.parentNode.userdata['mathlibok'] = True
+        self.parentNode.userdata['rocqok'] = True
+        self.parentNode.userdata['mathcompok'] = True
 
 
-class lean(Command):
-    r"""\lean{decl list} """
+class rocq(Command):
+    r"""\rocq{decl list} """
     args = 'decls:list:nox'
 
     def digest(self, tokens):
         Command.digest(self, tokens)
         decls = [dec.strip() for dec in self.attributes['decls']]
-        self.parentNode.setUserData('leandecls', decls)
-        all_decls = self.ownerDocument.userdata.setdefault('lean_decls', [])
+        self.parentNode.setUserData('rocqdecls', decls)
+        all_decls = self.ownerDocument.userdata.setdefault('rocq_decls', [])
         all_decls.extend(decls)
 
 
@@ -119,18 +119,18 @@ class discussion(Command):
 
 
 CHECKMARK_TPL = Template("""
-    {% if obj.userdata.leanok and ('proved_by' not in obj.userdata or obj.userdata.proved_by.userdata.leanok ) %}
+    {% if obj.userdata.rocqok and ('proved_by' not in obj.userdata or obj.userdata.proved_by.userdata.rocqok ) %}
     ✓
     {% endif %}
 """)
 
-LEAN_DECLS_TPL = Template("""
-    {% if obj.userdata.leandecls %}
-    <button class="modal lean">L∃∀N</button>
-    {% call modal('Lean declarations') %}
+ROCQ_DECLS_TPL = Template("""
+    {% if obj.userdata.rocqdecls %}
+    <button class="modal rocq">Rocq</button>
+    {% call modal('Rocq declarations') %}
         <ul class="uses">
-          {% for lean, url in obj.userdata.lean_urls %}
-          <li><a href="{{ url }}" class="lean_decl">{{ lean }}</a></li>
+          {% for rocq, url in obj.userdata.rocq_urls %}
+          <li><a href="{{ url }}" class="rocq_decl">{{ rocq }}</a></li>
           {% endfor %}
         </ul>
     {% endcall %}
@@ -143,19 +143,19 @@ GITHUB_ISSUE_TPL = Template("""
     {% endif %}
 """)
 
-LEAN_LINKS_TPL = Template("""
-  {% if thm.userdata['lean_urls'] -%}
-    {%- if thm.userdata['lean_urls']|length > 1 -%}
+ROCQ_LINKS_TPL = Template("""
+  {% if thm.userdata['rocq_urls'] -%}
+    {%- if thm.userdata['rocq_urls']|length > 1 -%}
   <div class="tooltip">
-      <span class="lean_link">Lean</span>
+      <span class="rocq_link">Rocq</span>
       <ul class="tooltip_list">
-        {% for name, url in thm.userdata['lean_urls'] %}
-           <li><a href="{{ url }}" class="lean_decl">{{ name }}</a></li>
+        {% for name, url in thm.userdata['rocq_urls'] %}
+           <li><a href="{{ url }}" class="rocq_decl">{{ name }}</a></li>
         {% endfor %}
       </ul>
   </div>
     {%- else -%}
-    <a class="lean_link lean_decl" href="{{ thm.userdata['lean_urls'][0][1] }}">Lean</a>
+    <a class="rocq_link rocq_decl" href="{{ thm.userdata['rocq_urls'][0][1] }}">Rocq</a>
     {%- endif -%}
     {%- endif -%}
 """)
@@ -193,37 +193,48 @@ def ProcessOptions(options, document):
     outdir = document.config['files']['directory']
     outdir = string.Template(outdir).substitute({'jobname': jobname})
 
-    def make_lean_data() -> None:
+    def make_rocq_data() -> None:
         """
         Build url and formalization status for nodes in the dependency graphs.
-        Also create the file lean_decls of all Lean names referred to in the blueprint.
+        Also create the file rocq_decls of all Rocq names referred to in the blueprint.
         """
 
         project_dochome = document.userdata.get('project_dochome',
-                                                'https://leanprover-community.github.io/mathlib4_docs')
+                                                'https://math-comp.github.io/htmldoc_2_5_0')
 
         for graph in document.userdata['dep_graph']['graphs'].values():
             nodes = graph.nodes
             for node in nodes:
-                leandecls = node.userdata.get('leandecls', [])
-                lean_urls = []
-                for leandecl in leandecls:
-                    lean_urls.append(
-                        (leandecl,
-                         f'{project_dochome}/find/#doc/{leandecl}'))
+                rocqdecls = node.userdata.get('rocqdecls', [])
+                rocq_urls = []
+                for rocqdecl in rocqdecls:
+                    if rocqdecl.count(".") == 0:
+                        log.warning(
+                            f"The Rocq declaration should be given as a full Rocq name, "
+                            f"e.g. MyNaturals.naturals.MyNat instead of just MyNat. "
+                            f"The issue arose when processing {rocqdecl}."
+                        )
+                        continue
+                    # TODO(reiniscirpons): Figure out how to point to the
+                    # correct definition without such ugly hacks
+                    decl_slug = ".".join(rocqdecl.split(".")[:-1])
+                    decl_anchor = rocqdecl.split(".")[-1]
+                    rocq_urls.append(
+                        (rocqdecl,
+                         f'{project_dochome}/{decl_slug}.html#{decl_anchor}'))
 
-                node.userdata['lean_urls'] = lean_urls
+                node.userdata['rocq_urls'] = rocq_urls
 
                 used = node.userdata.get('uses', [])
-                node.userdata['can_state'] = all(thm.userdata.get('leanok')
+                node.userdata['can_state'] = all(thm.userdata.get('rocqok')
                                                  for thm in used) and not node.userdata.get('notready', False)
                 proof = node.userdata.get('proved_by')
                 if proof:
                     used.extend(proof.userdata.get('uses', []))
-                    node.userdata['can_prove'] = all(thm.userdata.get('leanok')
+                    node.userdata['can_prove'] = all(thm.userdata.get('rocqok')
                                                      for thm in used)
                     node.userdata['proved'] = proof.userdata.get(
-                        'leanok', False)
+                        'rocqok', False)
                 else:
                     node.userdata['can_prove'] = False
                     node.userdata['proved'] = False
@@ -232,15 +243,15 @@ def ProcessOptions(options, document):
                 node.userdata['fully_proved'] = all(n.userdata.get('proved', False) or item_kind(
                     n) == 'definition' for n in graph.ancestors(node).union({node}))
 
-        lean_decls_path = Path(document.userdata['working-dir']).parent/"lean_decls"
-        lean_decls_path.write_text("\n".join(document.userdata.get("lean_decls", [])))
+        rocq_decls_path = Path(document.userdata['working-dir']).parent/"rocq_decls"
+        rocq_decls_path.write_text("\n".join(document.userdata.get("rocq_decls", [])))
 
-    document.addPostParseCallbacks(150, make_lean_data)
+    document.addPostParseCallbacks(150, make_rocq_data)
 
     document.addPackageResource([PackageCss(path=STATIC_DIR/'blueprint.css')])
 
     colors = document.userdata['dep_graph']['colors'] = {
-        'mathlib': ('darkgreen', 'Dark green'),
+        'mathcomp': ('darkgreen', 'Dark green'),
         'stated': ('green', 'Green'),
         'can_state': ('blue', 'Blue'),
         'not_ready': ('#FFAA33', 'Orange'),
@@ -254,9 +265,9 @@ def ProcessOptions(options, document):
         data = node.userdata
 
         color = ''
-        if data.get('mathlibok'):
-            color = colors['mathlib'][0]
-        elif data.get('leanok'):
+        if data.get('mathcompok'):
+            color = colors['mathcomp'][0]
+        elif data.get('rocqok'):
             color = colors['stated'][0]
         elif data.get('can_state'):
             color = colors['can_state'][0]
@@ -266,7 +277,7 @@ def ProcessOptions(options, document):
 
     def fillcolorizer(node) -> str:
         data = node.userdata
-        stated = data.get('leanok')
+        stated = data.get('rocqok')
         can_state = data.get('can_state')
         can_prove = data.get('can_prove')
         proved = data.get('proved')
@@ -292,7 +303,7 @@ def ProcessOptions(options, document):
     def make_legend() -> None:
         """
         Extend the dependency graph legend defined by the depgraph plugin
-        by adding information specific to Lean blueprints. This is registered
+        by adding information specific to Rocq blueprints. This is registered
         as a post-parse callback to allow users to redefine colors and their 
         descriptions.
         """
@@ -309,15 +320,15 @@ def ProcessOptions(options, document):
                 "the <em>proof</em> of this result is formalized"),
             (f"{document.userdata['dep_graph']['colors']['fully_proved'][1]} background", 
                 "the <em>proof</em> of this result and all its ancestors are formalized"),
-            (f"{document.userdata['dep_graph']['colors']['mathlib'][1]} border",
-                "this is in Mathlib"),
+            (f"{document.userdata['dep_graph']['colors']['mathcomp'][1]} border",
+                "this is in math-comp"),
         ])
 
     document.addPostParseCallbacks(150, make_legend)
 
     document.userdata.setdefault(
         'thm_header_extras_tpl', []).extend([CHECKMARK_TPL])
-    document.userdata.setdefault('thm_header_hidden_extras_tpl', []).extend([LEAN_DECLS_TPL,
+    document.userdata.setdefault('thm_header_hidden_extras_tpl', []).extend([ROCQ_DECLS_TPL,
                                                                              GITHUB_ISSUE_TPL])
     document.userdata['dep_graph'].setdefault('extra_modal_links_tpl', []).extend([
-        LEAN_LINKS_TPL, GITHUB_LINK_TPL])
+        ROCQ_LINKS_TPL, GITHUB_LINK_TPL])

@@ -46,7 +46,13 @@ this plugin as any other plasTeX plugin, using
 `plastex --plugins rocqblueprint my_file.tex` (not recommended).
 
 In order to use the `rocqblueprint` tool, you need to already have a Rocq
-project containing a `_CoqProject` file. In addition, your blueprint will be easier to
+project. A
+[`_CoqProject`](https://rocq-prover.org/doc/V9.1.0/refman/practical-tools/utilities.html#building-a-project-with-coqproject-overview)
+file and an
+[`opam`](https://rocq-prover.org/docs/opam-packaging#create-a-package-definition-file) file containing your
+project dependencies and a build command are required if you wish to automatically generate a GitHub CI job
+for building the blueprint.
+In addition, your blueprint will be easier to
 configure if you have at least one commit in the git repository of your project
 and you have already configured its GitHub git remote (GitHub displays
 instructions allowing to do the remote setup when you create a new repository

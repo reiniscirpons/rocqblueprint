@@ -24,7 +24,7 @@ from rich.console import Console
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.theme import Theme
 
-log = logging.getLogger("Mathlib tools")
+log = logging.getLogger("rocqblueprint tools")
 log.setLevel(logging.INFO)
 if (log.hasHandlers()):
     log.handlers.clear()
@@ -70,100 +70,7 @@ class CustomMultiCommand(click.RichGroup):
         ctx.fail('Too many matches: %s' % ', '.join(sorted(matches)))
 
 
-class Lakefile(ABC):
-    def __init__(self, path: Path):
-        self.path = path
-
-    @abstractmethod
-    def parse_libs(self) -> List[str]:
-        """
-        Extract list of libraries from the lakefile. If the lakefile has a
-        default target, it will be the first element of the returned list.
-        """
-        pass
-
-    @abstractmethod
-    def add_checkdecls(self) -> None:
-        """Update the lakefile to add a requirement for checkdecls"""
-        pass
-
-    @abstractmethod
-    def add_docgen(self) -> None:
-        """Update the lakefile to add a requirement for docgen"""
-        pass
-
-class LakefileLean(Lakefile):
-    def __init__(self, lakefile_lean: Path):
-        super().__init__(lakefile_lean)
-
-    def parse_libs(self) -> List[str]:
-        """see `super.parse_libs`"""
-        libs: List[str] = []
-        lib_re = re.compile(r"\s*lean_lib\s*([^ ]*)\b")
-        default_re = re.compile(r"@\[default_target\]")
-        found_default = False
-        with self.path.open("r", encoding="utf8") as lf:
-            for line in lf:
-                m = lib_re.match(line)
-                if m:
-                    lib_name = m.group(1).strip("«» ")
-                    if found_default:
-                        libs.insert(0,lib_name)
-                    else:
-                        libs.append(lib_name)
-                found_default = bool(default_re.match(line))
-        return libs
-
-    def add_checkdecls(self) -> None:
-        """see `super.add_checkdecls`"""
-        with self.path.open("a") as lf:
-            lf.write('\nrequire checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"')
-
-    def add_docgen(self) -> None:
-        """see `super.add_docgen"""
-        with self.path.open("a", encoding="utf8") as lf:
-            lf.write(dedent('''
-
-                meta if get_config? env = some "dev" then
-                require «doc-gen4» from git
-                  "https://github.com/leanprover/doc-gen4" @ "main"'''))
-
-class LakefileToml(Lakefile):
-    def __init__(self, lakefile_toml: Path):
-        self._file = TOMLFile(lakefile_toml)
-        self._toml: TOMLDocument = self._file.read()
-        super().__init__(lakefile_toml)
-
-    def parse_libs(self) -> List[str]:
-        """see `super.parse_libs`"""
-        defaults = self._toml.get('defaultTargets', [])
-        libs: List[str] = []
-        for lib in self._toml.get("lean_lib", []):
-            if lib['name'] in defaults:
-                libs.insert(0, lib['name'])
-            else:
-                libs.append(lib['name'])
-
-        return libs
-
-    def add_checkdecls(self) -> None:
-        """see `super.add_checkdecls`"""
-        self._add_require("checkdecls", "https://github.com/PatrickMassot/checkdecls.git")
-
-    def add_docgen(self) -> None:
-        """see `super.add_docgen`"""
-        self._add_require("«doc-gen4»", "https://github.com/leanprover/doc-gen4", rev="main")
-
-    def _add_require(self, name:str, git:str, rev:Optional[str] = None) -> None:
-        """Add a [[require]] to self._toml and dump it"""
-        require = tomlkit.aot()
-        item = {'name':name,'git':git}
-        if rev:
-            item['rev'] = rev
-        require.append(tomlkit.item(item))
-
-        self._toml.append("require", require)
-        self._file.write(self._toml)
+# TODO(reiniscirpons): Add support for dune?
 
 debug = False
 
@@ -217,8 +124,8 @@ def error(msg: str) -> NoReturn:
               help='Display python tracebacks in case of error.')
 @click.version_option()
 def cli(python_debug: bool) -> None:
-    """Command line client to manage Lean blueprints.
-    Use leanblueprint COMMAND --help to get more help on any specific command."""
+    """Command line client to manage Rocq blueprints.
+    Use rocqblueprint COMMAND --help to get more help on any specific command."""
     global debug
     debug = python_debug
 
@@ -229,26 +136,13 @@ repo: Optional[Repo] = None
 try:
     repo = Repo(".", search_parent_directories=True)
 except InvalidGitRepositoryError:
-    error("Could not find a Lean project. Please run this command from inside your project folder.")
+    error("Could not find a Rocq project. Please run this command from inside your project folder.")
 
 assert repo is not None
 
-# locate lakefile
+# locate opam files
 
-lakefile_lean_path = Path(repo.working_dir)/"lakefile.lean"
-lakefile_toml_path = Path(repo.working_dir)/"lakefile.toml"
-
-lakefile: Optional[Lakefile] = None
-
-if lakefile_lean_path.exists() and lakefile_toml_path.exists():
-    warning("Both lakefile.lean and lakefile.toml exist; using lakefile.lean")
-    lakefile = LakefileLean(lakefile_lean_path)
-elif lakefile_lean_path.exists():
-    lakefile = LakefileLean(lakefile_lean_path)
-elif lakefile_toml_path.exists():
-    lakefile = LakefileToml(lakefile_toml_path)
-else:
-    error(f"Could not find lakefile.lean or lakefile.toml in {repo.working_dir}")
+opamfile_paths = list(Path(repo.working_dir).glob("*.opam"))
 
 # blueprint root directory
 
@@ -257,18 +151,17 @@ blueprint_root = Path(repo.working_dir)/"blueprint"
 @cli.command()
 def new() -> None:
     """
-    Create a new Lean blueprint in the given repository.
+    Create a new Rocq blueprint in the given repository.
     """
-    assert lakefile is not None
     loader = FileSystemLoader(Path(__file__).parent/"templates")
     env = Environment(loader=loader, variable_start_string='{|', variable_end_string='|}',
                       comment_start_string='{--', comment_end_string='--}')
 
-    console.print("\nWelcome to Lean blueprint\n", style="title")
+    console.print("\nWelcome to Rocq blueprint\n", style="title")
     can_try_ci = True
 
     if repo is None:
-        error("Could not find a Lean project. Please run this command from inside your project folder.")
+        error("Could not find a Rocq project. Please run this command from inside your project folder.")
 
     if repo.is_dirty():
         error("The repository contains uncommitted changes. Please clean it up before creating a blueprint.")
@@ -284,14 +177,10 @@ def new() -> None:
             # This will happen if there is no commit in the repo.
             name = "Anonymous"
 
-
-    libs = lakefile.parse_libs()
-    if not libs:
+    if len(opamfile_paths) == 0:
         warning(
-            "Could not find Lean library names in lakefile. Will not propose to setup continuous integration.")
+            f"Could not find opam file in {repo.working_dir}. Will not propose to setup continuous integration.")
         can_try_ci = False
-
-    manifest_path = Path(repo.working_dir)/"lake-manifest.json"
 
     # Will now try to guess the GitHub url
     github = ""
@@ -340,11 +229,8 @@ def new() -> None:
 
     console.print("\nGeneral information about the project", style="title")
     config['title'] = ask("Project title", default="My formalization project")
-    if len(libs) > 1:
-        config['lib_name'] = ask(
-            "Lean library name", choices=libs, default=libs[0])
-    else:
-        config['lib_name'] = libs[0]
+    config['lib_name'] = ask(
+        "Rocq library name")
     config['author'] = ask(
         "Author ([info]use \\and to separate authors if needed[/])", default=name)
 
@@ -388,23 +274,6 @@ def new() -> None:
         console.print(
             "\nBlueprint source successfully created in the blueprint folder :tada:\n")
 
-    console.print("\nLake configuration updating", style="title")
-    console.print("The next two questions are crucial for the blueprint infrastructure. Please use the default answer unless you are really sure you already did the necessary work.")
-
-    if confirm("Modify lakefile and lake-manifest to allow checking declarations exist?",
-               default=True):
-        lakefile.add_checkdecls()
-        console.print("Ok, lakefile is edited. Will now get the declaration check library. Note this may be long if you just created the project and did not yet get Mathlib.")
-        subprocess.run("lake update checkdecls",
-                       cwd=str(blueprint_root.parent), check=False, shell=True)
-
-    if confirm("Modify lakefile and lake-manifest to allow building the documentation?",
-               default=True):
-        lakefile.add_docgen()
-        console.print("Ok, lakefile is edited. Will now get the doc-gen library.")
-        subprocess.run("lake -R -Kenv=dev update doc-gen4",
-                       cwd=str(blueprint_root.parent), check=False, shell=True)
-        
     home_page_created = False
 
     if confirm("Do you want to create a home page for the project, "
@@ -434,8 +303,15 @@ def new() -> None:
             console.print("The main file you want to edit there is `index.md`.")
 
     workflow_files: List[Path] = []
+    # TODO: Remove the can_try_ci override below once we figure it out
+    can_try_ci = False
     if can_try_ci and confirm("Configure continuous integration to compile blueprint?",
                               default=True):
+        config["opamfile"] = ask(
+            "Which opam file to use for building the project in CI?",
+            choices=opamfile_paths,
+            default=opamfile_paths[0],
+        )
         tpl = env.get_template("blueprint.yml")
         path = Path(repo.working_dir)/".github"/"workflows"
         path.mkdir(parents=True, exist_ok=True)
@@ -444,7 +320,7 @@ def new() -> None:
             f"GitHub workflow file created at {path/'blueprint.yml'}")
         workflow_files.append(path/'blueprint.yml')
 
-    files_to_add = [out_dir, lakefile.path, manifest_path] + workflow_files
+    files_to_add = [out_dir] + workflow_files
 
     if home_page_created:
         files_to_add.append(jekyll_out_dir)
@@ -470,7 +346,7 @@ def mk_pdf() -> None:
     bbl_path = blueprint_root/"print"/"print.bbl"
     if bbl_path.exists():
         shutil.copy(bbl_path, blueprint_root/"src"/"web.bbl")
-    
+
 @cli.command()
 def pdf() -> None:
     """
@@ -490,18 +366,6 @@ def web() -> None:
     """
     mk_web()
 
-def do_checkdecls() -> None:
-    subprocess.run("lake exe checkdecls blueprint/lean_decls",
-                   cwd=str(blueprint_root.parent), check=True, shell=True)
-
-@cli.command()
-def checkdecls() -> None:
-    """
-    Check that each declaration mentioned in the blueprint exists in Lean.
-    Requires to build the project and the blueprint first.
-    """
-    do_checkdecls()
-
 
 @cli.command()
 def all() -> None:
@@ -510,10 +374,6 @@ def all() -> None:
     """
     mk_pdf()
     mk_web()
-    subprocess.run("lake build",
-                   cwd=str(blueprint_root.parent), check=True, shell=True)
-    do_checkdecls()
-
 
 
 @cli.command()
@@ -555,6 +415,6 @@ def safe_cli():
 
 
 if __name__ == "__main__":
-    # This allows `python3 -m leanblueprint.client`.
+    # This allows `python3 -m rocqblueprint.client`.
     # This is useful for when python is on the path but its installed scripts are not
     safe_cli()
