@@ -1,4 +1,3 @@
-# TODO(reiniscirpons): Figure out how to do a rocq build using CI
 name: Compile blueprint
 
 on:
@@ -14,31 +13,126 @@ concurrency:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: read          # Read access to repository contents
-  pages: write            # Write access to GitHub Pages
-  id-token: write         # Write access to ID tokens
-  issues: write           # Write access to issues
-  pull-requests: write    # Write access to pull requests
+  contents: read  # Read access to repository contents
+  pages: write    # Write access to GitHub Pages
+  id-token: write # Write access to ID tokens
 
 jobs:
-  build_project:
+  build_project_blueprint:
     runs-on: ubuntu-latest
-    name: Build project
+    name: Build project blueprint
+    env:
+      homepage: "home_page"
+      # The rocq version to use. Use "latest" to use the latest version of Rocq.
+      # For more info see the `coq_version` parameter of the `docker-coq-action`:
+      # https://github.com/rocq-community/docker-coq-action?tab=readme-ov-file#coq_version
+      rocq_version: "{| rocq_version |}"
+      # The opam file to use to build the project.
+      opam_file: "{| opamfile |}"
+      # A custom command to build the docs. If it is too long to give in a single line,
+      # please edit the "Build docs" group below.
+      custom_doc_command: "{| custom_doc_command |}"
     steps:
-      - name: Checkout project
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Fetch all history for all branches and tags
+          submodules: 'true' # Get submodules, necessary for e.g. coqdocjs
 
-      - name: Build and lint project
-        uses: leanprover/lean-action@434f25c2f80ded67bba02502ad3a86f25db50709 # 2025-07-02
-        with:
-          build: true
-          lint: true
-          mk_all-check: true
+      - name: Check for `home_page` folder # this is meant to detect a Jekyll-based website
+        id: check_home_page
+        run: |
+          if [ -d home_page ]; then
+            echo "The 'home_page' folder exists in the repository."
+            echo "HOME_PAGE_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "The 'home_page' folder does not exist in the repository."
+            echo "HOME_PAGE_EXISTS=false" >> $GITHUB_ENV
+          fi
 
-      - name: Compile blueprint and documentation
-        uses: leanprover-community/docgen-action@deed0cdc44dd8e5de07a300773eb751d33e32fc8 # 2025-10-26
+      - name: Build rocq project
+        uses: coq-community/docker-coq-action@v1
         with:
-          blueprint: true
-          homepage: home_page
+          opam_file: ${{ env.opam_file }}
+          coq_version: ${{ env.rocq_version }}
+          ocaml_version: 'default'
+          before_script: |
+            startGroup "Workaround permission issue"
+              sudo chown -R 1000:1000 .
+            endGroup
+          after_script: |
+            # The following command group builds the documentation for the project.
+            # Please modify it if your project requires a different build procedure
+            # for producing the docs.
+            startGroup "Build docs"
+            custom_doc_command="${{ env.custom_doc_command }}"
+            if [ -z "$custom_doc_command" ]
+            then
+              if ! command -v rocq >/dev/null 2>&1 ;
+              then
+                coq_makefile -f _CoqProject -o Makefile.blueprint.doc
+              else
+                rocq makefile -f _CoqProject -o Makefile.blueprint.doc
+              fi
+              make -f Makefile.blueprint.doc html
+            else
+              eval "$custom_doc_command"
+            fi
+            # Currently, we expect the built docs to exist in the ./html/ folder,
+            # if this is not the case then the following should be adjusted.
+            cp -r html ${{ env.homepage }}/docs
+            endGroup
+
+      - name: Revert permissions
+        # to avoid a warning at cleanup time
+        if: ${{ always() }}
+        run: sudo chown -R 1001:116 .
+
+      - name: Build blueprint and copy to `home_page/blueprint`
+        uses: xu-cheng/texlive-action@v2
+        with:
+          docker_image: ghcr.io/xu-cheng/texlive-full:20250101
+          run: |
+            # Install necessary dependencies and build the blueprint
+            apk update
+            apk add --update make py3-pip git pkgconfig graphviz graphviz-dev gcc musl-dev
+            git config --global --add safe.directory $GITHUB_WORKSPACE
+            git config --global --add safe.directory `pwd`
+            python3 -m venv env
+            source env/bin/activate
+            pip install --upgrade pip requests wheel
+            pip install pygraphviz --config-settings="--global-option=build_ext" --config-settings="--global-option=-L/usr/lib/graphviz/" --config-settings="--global-option=-R/usr/lib/graphviz/"
+            # TODO: install directly from pip instead:
+            # pip install rocqblueprint
+            pip install "git+https://github.com/reiniscirpons/rocqblueprint"
+            rocqblueprint pdf
+            mkdir -p home_page
+            cp blueprint/print/print.pdf home_page/blueprint.pdf
+            rocqblueprint web
+            cp -r blueprint/web home_page/blueprint
+
+      - name: Bundle dependencies
+        uses: ruby/setup-ruby@v1
+        with:
+          working-directory: ${{ env.homepage }}
+          ruby-version: "3.4"
+          bundler-cache: true  # Enable caching for bundler
+
+      - name: Build website using Jekyll
+        if: github.event_name == 'push' && env.HOME_PAGE_EXISTS == 'true'
+        working-directory: ${{ env.homepage }}
+        env:
+          JEKYLL_GITHUB_TOKEN: ${{ github.token }}
+        run: JEKYLL_ENV=production bundle exec jekyll build # Note this will also copy the blueprint and API doc into ${{ env.homepage }}/_site
+        shell: bash
+
+      - name: "Upload website (API documentation, blueprint and any home page)"
+        if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.HOME_PAGE_EXISTS == 'true' && format('{0}/_site', env.homepage) || format('{0}/', env.homepage) }}
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push'
+        id: deployment
+        uses: actions/deploy-pages@v4
+

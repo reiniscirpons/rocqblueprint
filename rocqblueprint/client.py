@@ -276,6 +276,7 @@ def new() -> None:
 
     home_page_created = False
 
+    console.print("\nHomepage creation", style="title")
     if confirm("Do you want to create a home page for the project, "
                "with links to the blueprint, the API documentation and the "
                "repository?"):
@@ -302,16 +303,50 @@ def new() -> None:
             console.print("Ok, the home page template is created in `home_page`.")
             console.print("The main file you want to edit there is `index.md`.")
 
+    console.print("\nGithub CI configuration", style="title")
     workflow_files: List[Path] = []
-    # TODO: Remove the can_try_ci override below once we figure it out
-    can_try_ci = False
-    if can_try_ci and confirm("Configure continuous integration to compile blueprint?",
-                              default=True):
-        config["opamfile"] = ask(
-            "Which opam file to use for building the project in CI?",
-            choices=opamfile_paths,
-            default=opamfile_paths[0],
+    if can_try_ci and confirm("Do you want to configure a Github CI action to compile and deploy the blueprint?"):
+        config["opamfile"] = ""
+        if len(opamfile_paths) == 0:
+            warning(
+                "No opam file found, this will need to manually configured by\n"
+                "editing the .github/workflows/blueprint.yml file."
+            )
+        elif len(opamfile_paths) == 1:
+            config["opamfile"] = opamfile_paths[0].name
+        else:
+            opamfile_paths_str = [f.name for f in opamfile_paths]
+            config["opamfile"] = opamfile_paths_str[
+                askInt(
+                    "Which opam file to use for building the project in the CI?\n"
+                    + f"  Enter a number between 0 and {len(opamfile_paths)-1}, corresponding to the choices:\n  "
+                    + "\n  ".join(
+                        "[" + str(i) + "]: " + name
+                        for i, name in enumerate(opamfile_paths_str)
+                    )
+                    + "\n",
+                    choices=[str(i) for i in range(len(opamfile_paths))],
+                    default=0,
+                )
+            ]
+        config["rocq_version"] = ask(
+            "Which version of Rocq to use for building the project and docs in CI?\n"
+            "  Note: See https://github.com/rocq-community/docker-coq-action?tab=readme-ov-file#coq_version\n"
+            "  for more details about possible values.\n",
+            default='9.0',
         )
+        config["custom_doc_command"] = ""
+        if confirm(
+            "Use custom documentation build command?\n"
+            "  Note: If the custom build command is long, we recommend skipping this step and manually\n"
+            "  adjusting it in the generated .github/workflows/blueprint.yml file afterwards.\n",
+            default=False,
+        ):
+            config["custom_doc_command"] = ask(
+                "Please enter the custom documentation build command.\n"
+                "  Note: Leave this field empty to skip.",
+                default="",
+            )
         tpl = env.get_template("blueprint.yml")
         path = Path(repo.working_dir)/".github"/"workflows"
         path.mkdir(parents=True, exist_ok=True)

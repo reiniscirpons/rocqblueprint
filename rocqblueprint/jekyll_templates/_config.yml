@@ -23,8 +23,10 @@ title: {| web_title |}
 description: {| web_subtitle |}
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "{| home |}" # the base hostname & protocol for your site, e.g. http://example.com
-twitter_username:
 github_username: {| github_username |}
+# The specifier below should be in the form "user/project", where user is your
+# github username and project is you ptoject name. If these fields are missing,
+# then the CI may fail.
 repository: {| github_username |}/{| github_projectname |}
 
 # Build settings

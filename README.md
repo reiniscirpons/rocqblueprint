@@ -9,6 +9,10 @@ This infrastructure was originally created in 2020 as [`leanblueprint`](https://
 [Sphere Eversion Project](https://leanprover-community.github.io/sphere-eversion/).
 The present project is a fork of `leanblueprint` adapted for use with Rocq.
 
+> Note: `rocqblueprint` is a new tool and so not many project use it yet. If
+> you are a user of the tool, then please make an issue or open a pull request 
+> to feature your project in the README!
+
 ## Installation
 
 This package depends on `plastexdepgraph` which requires graphviz and its development libraries. 
@@ -31,6 +35,12 @@ pip install -U rocqblueprint
 
 will upgrade to the latest version.
 
+## Example project
+
+An example project utilizing the `rocqblueprint` tool is available at
+[reinisc.id.lv/example-rocq-blueprint-project/](https://reinisc.id.lv/example-rocq-blueprint-project/) with accompanying github repo
+[reiniscirpons/example-rocq-blueprint-project](https://github.com/reiniscirpons/example-rocq-blueprint-project) .
+
 ## Starting a blueprint
 
 This package provides a command line tool `rocqblueprint` that automates in
@@ -52,6 +62,11 @@ file and an
 [`opam`](https://rocq-prover.org/docs/opam-packaging#create-a-package-definition-file) file containing your
 project dependencies and a build command are required if you wish to automatically generate a GitHub CI job
 for building the blueprint.
+The `_CoqProject` file may be omitted if you supply a custom command to build
+the documentation for your project. Note that only documentation built using
+the [`coqdoc` or `rocq doc`](https://rocq-prover.org/doc/V9.1.0/refman/using/tools/coqdoc.html)
+tools is supported at the moment.
+
 In addition, your blueprint will be easier to
 configure if you have at least one commit in the git repository of your project
 and you have already configured its GitHub git remote (GitHub displays
@@ -93,9 +108,9 @@ build your blueprint locally. The available commands are:
 * `rocqblueprint pdf` to build the pdf version (this requires a TeX installation
   of course).
 * `rocqblueprint web` to build the web version
-* `rocqblueprint checkdecls` to check that every Rocq declaration name that appear
-  in the blueprint exist in the project (or in a dependency of the project such
-  as [math-comp](https://github.com/math-comp/math-comp)). This requires a compiled Rocq project, so make sure to do so beforehand.
+<!-- * `rocqblueprint checkdecls` to check that every Rocq declaration name that appear -->
+<!--   in the blueprint exist in the project (or in a dependency of the project such -->
+<!--   as [math-comp](https://github.com/math-comp/math-comp)). This requires a compiled Rocq project, so make sure to do so beforehand. -->
 * `rocqblueprint all` to run the previous three commands.
 * `rocqblueprint serve` to start a local webserver showing your local blueprint
   (this sounds silly but web browsers paranoia makes it impossible to simply
